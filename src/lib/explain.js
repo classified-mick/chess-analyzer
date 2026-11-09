@@ -132,14 +132,15 @@ export function moveFeatures(fen, uci) {
     return tmp && (VALUE[p.type] > VALUE[mv.promotion || mv.piece] || see(tmp, p.square) > 0);
   });
   const check = c.inCheck();
+  const tag = (p) => (p.type === 'k' ? 'короля' : pieceAt(p) + (!check && isTrapped(c, p.square) ? ' (ему некуда уйти)' : ''));
   const big = targets.filter((p) => p.type === 'k' || VALUE[p.type] >= 3).sort((a, b) => VALUE[b.type] - VALUE[a.type]);
   if (big.length >= 2) {
-    f.push(`вилка: ${NOM[mv.promotion || mv.piece]} нападает сразу на ${join(big.map((p) => p.type === 'k' ? 'короля' : pieceAt(p)))}`);
+    f.push(`вилка: ${NOM[mv.promotion || mv.piece]} нападает сразу на ${join(big.map(tag))}`);
   } else if (check) {
     f.push('шах');
   } else if (targets.length) {
     const t = big[0] || targets[0];
-    f.push(`нападает на ${pieceAt(t)}`);
+    f.push(`нападает на ${tag(t)}`);
   }
 
   // Discovered attacks: another of our pieces now hits something it did not before.
@@ -201,6 +202,23 @@ export function moveFeatures(fen, uci) {
     if (mv.piece === 'q' && ply <= 6) f.push('рано выводит ферзя, его могут гонять');
   }
   return f;
+}
+
+// A piece of the side to move that is attacked with gain and has no safe square to go to.
+function isTrapped(c, sq) {
+  const p = c.get(sq);
+  if (!p || p.type === 'k' || p.type === 'p' || p.color !== c.turn()) return false;
+  const opp = flipped(c.fen());
+  if (!opp || see(opp, sq) <= 0) return false;
+  let moves;
+  try { moves = c.moves({ square: sq, verbose: true }); } catch { return false; }
+  for (const m of moves) {
+    c.move(m);
+    const lost = see(c, m.to) - (m.captured ? VALUE[m.captured] : 0);
+    c.undo();
+    if (lost <= 0) return false;
+  }
+  return true;
 }
 
 function findPin(c, sq, me) {
@@ -310,6 +328,13 @@ export function explainMove(r) {
         why.push(s + '.');
       }
       if (r.cls === 'miss') why.unshift('Соперник только что ошибся, а этот ход упускает шанс.');
+      // The move looks good (fork, capture, check) but the engine disagrees: say so plainly.
+      if (/^(вилка|забирает|бьёт|шах|нападает)/.test(feats[0] || '')) {
+        why.push(outcomeIsGain(r.fenAfter, ref, me)
+          ? 'Материал этот ход выигрывает, но позиция после него становится хуже, чем после лучшего хода.'
+          : 'Ход выглядит сильным, но выгоды не даёт: соперник спокойно защищается, а был ход сильнее.');
+      }
+      if (ref?.pv?.length > 1) out.refLine = numberedLine(r.fenAfter, pvToSan(r.fenAfter, ref.pv, 7));
       why.push(`Оценка: ${evBefore} → ${evAfter} (${evalWord(r.wAfter)} для ${me === 'w' ? 'белых' : 'чёрных'}).`);
       out.paras.push(why.join(' '));
     }
@@ -326,6 +351,13 @@ export function explainMove(r) {
   }
   if (bestLine?.pv?.length) out.bestLine = numberedLine(r.fenBefore, pvToSan(r.fenBefore, bestLine.pv, 8));
   return out;
+}
+
+// Does the opponent's best line still leave `me` with a material gain?
+function outcomeIsGain(fenAfter, ref, me) {
+  if (!ref) return false;
+  const sw = materialSwing(fenAfter, ref.pv, me);
+  return sw.net >= 1;
 }
 
 function pushIdea(out, fen, line, me, label) {

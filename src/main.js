@@ -359,11 +359,21 @@ function renderShapes() {
 }
 
 // Best available engine lines for a position: live search if it is deeper, else the stored analysis.
+// One source for the whole engine panel (lines, arrow, "best move" text, eval bar):
+// the stored analysis, until the live search is clearly deeper and has settled on its top move.
 function bestLines(fen) {
   const stored = analysisOf(fen);
-  const live = S.liveOn && S.live?.fen === fen ? S.live.lines : null;
-  if (live && (!stored || (live[0]?.depth || 0) >= (stored.lines[0]?.depth || 0))) return live;
-  return stored?.lines || live || null;
+  const live = S.liveOn && S.live?.fen === fen ? uniqueLines(S.live.lines) : null;
+  if (!live?.length) return stored?.lines || null;
+  if (!stored) return live;
+  const ld = live[0].depth || 0, sd = stored.lines[0]?.depth || 0;
+  const settled = S.live.done || (stab.fen === fen && stab.move === live[0].pv[0]);
+  return (settled && ld >= sd) || ld >= sd + 4 ? live : stored.lines;
+}
+// Multi-PV snapshots can briefly repeat the same first move in two slots; keep the first.
+function uniqueLines(lines) {
+  const seen = new Set();
+  return (lines || []).filter((l) => l.pv?.length && !seen.has(l.pv[0]) && seen.add(l.pv[0]));
 }
 
 // ---------------- eval bar ----------------
@@ -441,6 +451,7 @@ function renderCoach() {
   if (n.inVar) h += `<div class="tag">Свой вариант</div>`;
   h += `<div class="head"><div class="ic" style="background:${meta.color}">${meta.icon}</div><div class="ttl">${esc(ex.title)}</div><div class="ev">${esc(ex.eval)}</div></div>`;
   for (const p of ex.paras) h += `<p>${esc(p)}</p>`;
+  if (ex.refLine) h += `<div class="pv">Что дальше по мнению движка: ${esc(ex.refLine)}</div>`;
   if (ex.better) {
     h += `<div class="better"><p>${esc(ex.better.text).replace(esc(ex.better.san), `<b>${esc(ex.better.san)}</b>`)}</p>${ex.bestLine ? `<div class="pv">${esc(ex.bestLine)}</div>` : ''}</div>`;
   }
@@ -509,8 +520,11 @@ function trackStable(fen, lines, done) {
   if (depths.length === 3 && depths[0] >= 12 && depths.every((d) => stab.byDepth.get(d) === top.pv[0])) stab.move = top.pv[0];
 }
 function stableBest(fen) {
-  if (S.liveOn && stab.fen === fen && stab.move) return stab.move;
-  return analysisOf(fen)?.lines[0]?.pv?.[0] || null;
+  const lines = bestLines(fen);
+  if (!lines?.length) return null;
+  const fromLive = S.live?.fen === fen && lines[0] === uniqueLines(S.live.lines)[0];
+  if (fromLive && stab.fen === fen && stab.move) return stab.move;
+  return lines[0].pv[0];
 }
 
 // ---------------- live engine panel ----------------
