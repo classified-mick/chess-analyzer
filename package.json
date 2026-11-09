@@ -1,0 +1,28 @@
+{
+  "name": "chess-review",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local chess game review with Stockfish: chess.com-style move classes, explanations, live analysis.",
+  "scripts": {
+    "start": "vite build --logLevel warn && node server/index.js",
+    "up": "sh scripts/chess.sh start",
+    "stop": "sh scripts/chess.sh stop",
+    "status": "sh scripts/chess.sh status",
+    "serve": "node server/index.js",
+    "dev": "vite",
+    "build": "vite build",
+    "openings": "node scripts/build-openings.js",
+    "test": "node scripts/selftest.js"
+  },
+  "dependencies": {
+    "chess.js": "^1.4.0",
+    "chessground": "^9.2.1",
+    "ws": "^8.22.2"
+  },
+  "devDependencies": {
+    "vite": "^6.4.6"
+  },
+  "license": "GPL-3.0-or-later",
+  "author": "Mykhailo Kholiev"
+}

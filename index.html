@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Разбор партии</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E♞%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">♞ Разбор партии</div>
+    <div class="engine-chip" id="engineChip">движок…</div>
+    <div class="spacer"></div>
+    <div class="power" id="power" title="Сколько ядер процессора может занимать Stockfish">
+      <button data-p="quiet">Тихо</button><button data-p="normal">Обычно</button><button data-p="max">Максимум</button>
+    </div>
+    <button class="btn primary" id="btnLoad">Загрузить партию</button>
+    <button class="btn off" id="btnOff" title="Выключить приложение и движок">⏻</button>
+  </header>
+
+  <main class="layout">
+    <section class="boardcol">
+      <div class="player" id="pTop"></div>
+      <div class="boardrow">
+        <div class="evalbar" id="evalbar" title="Оценка позиции">
+          <div class="evalfill" id="evalFill"></div>
+          <span class="evaltxt" id="evalTxt"></span>
+        </div>
+        <div class="boardwrap" id="boardWrap">
+          <div id="board" class="cg-host"></div>
+          <div id="overlay" class="overlay"></div>
+        </div>
+      </div>
+      <div class="player" id="pBot"></div>
+      <div class="controls">
+        <button class="ctl" id="bStart" title="В начало (Home)">⏮</button>
+        <button class="ctl" id="bPrev" title="Назад (←)">◀</button>
+        <button class="ctl" id="bNext" title="Вперёд (→)">▶</button>
+        <button class="ctl" id="bEnd" title="В конец (End)">⏭</button>
+        <button class="ctl small" id="bFlip" title="Перевернуть (F)">⇅</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="progress" id="progress" hidden><div class="bar" id="progressBar"></div><span id="progressTxt"></span></div>
+      <nav class="tabs">
+        <button class="tab active" data-tab="review">Разбор</button>
+        <button class="tab" data-tab="report">Отчёт</button>
+      </nav>
+
+      <div class="tabpage" id="tab-review">
+        <div class="card coach" id="coach"></div>
+
+        <div class="card engine">
+          <div class="engine-head">
+            <label class="switch"><input type="checkbox" id="liveToggle" checked><span></span></label>
+            <span class="engine-name" id="engineName">Stockfish</span>
+            <span class="depth" id="engineDepth"></span>
+            <div class="spacer"></div>
+            <button class="chip" id="bArrow" title="Стрелка лучшего хода (A)">Стрелка</button>
+            <button class="chip" id="bThreat" title="Что угрожает соперник (T)">Угроза</button>
+          </div>
+          <div class="lines" id="lines"></div>
+          <div class="bestidea" id="bestIdea"></div>
+        </div>
+
+        <svg class="graph" id="graph" viewBox="0 0 600 110" preserveAspectRatio="none"></svg>
+        <div class="card moves" id="moves"></div>
+        <p class="hint"><kbd>←</kbd><kbd>→</kbd> ходы · <kbd>F</kbd> перевернуть · <kbd>A</kbd> стрелка · <kbd>T</kbd> угроза · <kbd>Esc</kbd> к партии · перетащи фигуру, чтобы сыграть свой ход</p>
+      </div>
+
+      <div class="tabpage" id="tab-report" hidden>
+        <div class="card report" id="report"></div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="loadDlg">
+    <form method="dialog" class="dlg">
+      <div class="dlg-head"><h2>Загрузить партию</h2><button class="x" value="cancel" aria-label="Закрыть">✕</button></div>
+      <label class="lbl">Ссылка на партию (chess.com, lichess) или PGN</label>
+      <textarea id="pgnInput" rows="5" placeholder="https://www.chess.com/game/live/…  или  1. e4 e5 2. Nf3 …"></textarea>
+      <div class="row">
+        <select id="presetSel">
+          <option value="fast">Быстро · ~1 с на позицию</option>
+          <option value="normal" selected>Стандарт · ~2 с на позицию</option>
+          <option value="deep">Глубоко · ~5 с на позицию</option>
+        </select>
+        <button class="btn primary" id="btnAnalyze" value="default">Разобрать</button>
+      </div>
+      <p class="err" id="loadErr"></p>
+
+      <label class="lbl">Мои партии на chess.com</label>
+      <div class="row">
+        <input id="userInput" placeholder="ник на chess.com" autocomplete="off">
+        <button class="btn" id="btnGames" type="button">Показать</button>
+      </div>
+      <div class="gamelist" id="gameList"></div>
+
+      <label class="lbl">Недавние разборы</label>
+      <div class="gamelist" id="recentList"></div>
+      <button class="btn link" id="btnSample" type="button">Открыть пример: Varenik145267 – ClassifiedMicl</button>
+    </form>
+  </dialog>
+
+  <div class="offscreen" id="offScreen" hidden>
+    <div><h2>Выключено</h2><p>Движок остановлен, процессор свободен.</p><p>Запустить снова: двойной клик по <b>Start Chess.command</b> в папке проекта или <code>npm start</code>.</p></div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
