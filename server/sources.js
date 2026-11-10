@@ -27,8 +27,16 @@ async function getJson(url) {
   return r.json();
 }
 
+// Each game type has its own endpoint. The same number can exist under several types
+// (a computer game id may also be someone else's live game), so the type must match the link.
+const CHESSCOM_API = {
+  live: (id) => `https://www.chess.com/callback/live/game/${id}`,
+  daily: (id) => `https://www.chess.com/callback/daily/game/${id}`,
+  computer: (id) => `https://www.chess.com/computer/callback/game/${id}`,
+};
+
 async function fromChessCom(kind, id) {
-  const d = await getJson(`https://www.chess.com/callback/${kind}/game/${id}`);
+  const d = await getJson(CHESSCOM_API[kind](id));
   const g = d.game;
   const h = g.pgnHeaders || {};
   const c = new Chess(h.FEN || undefined);
@@ -48,13 +56,13 @@ async function fromLichess(id) {
 
 // Accepts a URL (chess.com / lichess) and returns a PGN string.
 export async function importUrl(url) {
-  let m = url.match(/chess\.com\/(?:analysis\/)?game\/(live|daily)\/(\d+)/) || url.match(/chess\.com\/(live|daily)\/game\/(\d+)/);
+  let m = url.match(/chess\.com\/(?:analysis\/)?game\/(live|daily|computer)\/(\d+)/) || url.match(/chess\.com\/(live|daily|computer)\/game\/(\d+)/);
   if (m) return fromChessCom(m[1], m[2]);
   m = url.match(/chess\.com\/game\/(\d+)/);
   if (m) return fromChessCom('live', m[1]);
   m = url.match(/lichess\.org\/([A-Za-z0-9]{8,12})/);
   if (m) return fromLichess(m[1]);
-  throw new Error('Не понял ссылку. Нужна ссылка на партию chess.com или lichess.');
+  throw new Error('Не понял ссылку. Нужна ссылка на партию chess.com (обычную, по переписке или с ботом) или lichess.');
 }
 
 // Latest games of a chess.com player (newest first).
