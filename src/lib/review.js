@@ -81,6 +81,12 @@ export function classifyMove(fenBefore, uci, before, after, ctx = {}) {
   else if (loss <= 20) cls = 'mistake';
   else cls = 'blunder';
 
+  // Win chances near 0% hide the difference between "losing" and "mated next move".
+  // Allowing a forced mate when the best move avoided one is at least a mistake.
+  const mateAgainst = after.lines[0]?.score?.mate > 0; // opponent mates
+  const bestMated = top?.score?.mate !== undefined && top.score.mate < 0;
+  if (!isBest && mateAgainst && !bestMated && !BAD.has(cls)) cls = wBest >= 10 ? 'blunder' : 'mistake';
+
   // Book: position is in the opening database and every earlier move was book too.
   const op = openingOf(fenAfter);
   if (ctx.allBookSoFar !== false && op !== undefined && loss < 10) { res.cls = 'book'; res.opening = op || null; return res; }

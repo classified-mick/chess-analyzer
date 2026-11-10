@@ -323,8 +323,11 @@ export function explainMove(r) {
         const refFeats = moveFeatures(r.fenAfter, ref.pv[0]);
         const outcome = lineOutcome(r.fenAfter, ref, me === 'w' ? 'b' : 'w');
         let s = `Соперник отвечает ${refSan}`;
-        if (refFeats.length) s += `: ${join(refFeats.slice(0, 2))}`;
-        if (outcome) s += `${refFeats.length ? ', и в итоге' : ' и'} ${outcome}`;
+        if (refFeats[0] === 'ставит мат') s = `Соперник сразу ставит мат: ${refSan}`;
+        else {
+          if (refFeats.length) s += `: ${join(refFeats.slice(0, 2))}`;
+          if (outcome) s += `${refFeats.length ? ', и в итоге' : ' и'} ${outcome}`;
+        }
         why.push(s + '.');
       }
       if (r.cls === 'miss') why.unshift('Соперник только что ошибся, а этот ход упускает шанс.');
