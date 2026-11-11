@@ -274,6 +274,16 @@ const cg = Chessground($('board'), {
   premovable: { enabled: false },
   drawable: { enabled: true, visible: true, defaultSnapToValidMove: true },
 });
+// Arrows drawn before the board has its size get NaN coordinates and stay broken (a lone
+// arrowhead in the middle). Redraw whenever the board gets or changes its size.
+let lastBoardSize = '';
+new ResizeObserver(([e]) => {
+  const size = `${Math.round(e.contentRect.width)}x${Math.round(e.contentRect.height)}`;
+  if (size === lastBoardSize || !e.contentRect.width) return;
+  lastBoardSize = size;
+  cg.redrawAll();
+  renderShapes();
+}).observe($('boardWrap'));
 
 function dests(fen) {
   const c = new Chess(fen);
