@@ -19,6 +19,9 @@ const NOTABLE = new Set(['brilliant', 'great', 'inaccuracy', 'mistake', 'miss', 
 const GOODISH = new Set(['best', 'excellent', 'great', 'brilliant', 'book', 'forced']);
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
+// A shared review file carries its data here and runs without a server or engine.
+const SHARED = window.__CHESS_SHARED__ || null;
+
 // ---------------- state ----------------
 const S = {
   headers: {}, startFen: START_FEN,
@@ -30,7 +33,7 @@ const S = {
   orientation: 'white',
   reviewId: 0, reviewDone: true, total: 0, done: 0,
   live: null,        // { fen, lines, done }
-  liveOn: store.get('liveOn', true),
+  liveOn: SHARED ? false : store.get('liveOn', true),
   arrowOn: store.get('arrowOn', true),
   threatOn: false,
   retry: null,       // { ply, result: null | 'ok' | 'no', tries }
@@ -55,6 +58,7 @@ function connect() {
   };
 }
 function send(msg) {
+  if (SHARED) return; // view-only file: no engine
   if (net.ws?.readyState === 1) net.ws.send(JSON.stringify(msg));
   else net.queue.push(msg);
 }
@@ -225,18 +229,20 @@ function settleRetry(r) {
 }
 
 // ---------------- load ----------------
-function loadPgn(pgn, preset) {
+function loadPgn(pgn, preset, { shared = false } = {}) {
   const c = new Chess();
   c.loadPgn(pgn.trim());
   const hist = c.history({ verbose: true });
   S.headers = c.getHeaders();
   S.startFen = hist[0]?.before || c.fen();
   S.main = hist.map((m) => ({ uci: m.lan, san: m.san, fen: m.after, fenBefore: m.before, color: m.color }));
+  S.pgn = pgn;
   S.analyses = []; S.review = []; S.vars = []; S.retry = null;
   S.cur = { v: -1, i: 0 };
   S.reviewId++; S.reviewDone = false; S.total = S.main.length + 1; S.done = 0;
   const me = (store.get('user', 'ClassifiedMicl') || '').toLowerCase();
   S.orientation = me && (S.headers.Black || '').toLowerCase() === me ? 'black' : 'white';
+  if (shared) return;
   send({ type: 'review', id: S.reviewId, fens: [S.startFen, ...S.main.map((m) => m.fen)], preset });
   const title = `${S.headers.White || '?'} – ${S.headers.Black || '?'}`;
   const recent = store.get('recent', []).filter((g) => g.pgn !== pgn);
@@ -311,7 +317,7 @@ function renderBoard() {
     turnColor: turn,
     lastMove: n.move ? [n.move.uci.slice(0, 2), n.move.uci.slice(2, 4)] : undefined,
     check: c.inCheck() ? turn : false,
-    movable: { color: c.isGameOver() ? undefined : turn, dests: dests(n.fen) },
+    movable: { color: c.isGameOver() || SHARED ? undefined : turn, dests: SHARED ? new Map() : dests(n.fen) },
   });
   renderBadge(n);
   renderShapes();
@@ -439,7 +445,7 @@ function renderCoach() {
 
   if (!n.r) {
     el.innerHTML = `<div class="head"><div class="ic" style="background:var(--surface-3)">…</div><div class="ttl">${esc(moveLabel(n.move.fenBefore, n.move.san))}</div></div>
-      <p>Движок оценивает ход…</p>${n.inVar ? varActs() : ''}`;
+      <p>${SHARED ? 'В этом файле нет оценки для этой позиции: движок работает только у автора разбора.' : 'Движок оценивает ход…'}</p>${n.inVar ? varActs() : ''}`;
     return;
   }
 
@@ -460,7 +466,7 @@ function renderCoach() {
     acts.push(`<button class="btn" data-act="showbest">Показать лучший ход</button>`);
     acts.push(`<button class="btn" data-act="showline">Показать линию</button>`);
   }
-  if (!n.inVar && BAD.has(r.cls)) acts.push(`<button class="btn primary" data-act="retry">Попробовать ещё раз</button>`);
+  if (!n.inVar && BAD.has(r.cls) && !SHARED) acts.push(`<button class="btn primary" data-act="retry">Попробовать ещё раз</button>`);
   h += `<div class="acts">${acts.join('')}</div>`;
   if (n.inVar) h += varActs();
   el.innerHTML = h;
@@ -541,7 +547,7 @@ function renderLive() {
   const lines = bestLines(fen) || [];
   const el = $('lines');
   const depth = lines[0]?.depth;
-  $('engineDepth').textContent = !S.liveOn ? 'выключен' : depth ? `глубина ${depth}${S.live?.fen === fen && !S.live.done ? '…' : ' ✓'}` : 'считаю…';
+  $('engineDepth').textContent = SHARED ? (depth ? `глубина ${depth}, из разбора` : 'нет данных') : !S.liveOn ? 'выключен' : depth ? `глубина ${depth}${S.live?.fen === fen && !S.live.done ? '…' : ' ✓'}` : 'считаю…';
   if (new Chess(fen).isGameOver()) { el.innerHTML = '<div class="line"><span class="mvs">Партия окончена</span></div>'; $('bestIdea').innerHTML = ''; return; }
   el.innerHTML = lines.slice(0, 3).map((l, li) => {
     const sw = toWhite(l.score, fen);
@@ -896,13 +902,82 @@ $('recentList').addEventListener('click', (e) => {
   if (g) { loadPgn(g.pgn, g.preset || $('presetSel').value); $('loadDlg').close(); }
 });
 
+// ---------------- share as a file ----------------
+// Builds one self-contained HTML file: this page + its CSS/JS inlined + the review data.
+// The friend opens it in any browser, offline, and sees the same review (no live engine).
+async function exportShared() {
+  if (!S.main.length) return alert('Сначала загрузи партию.');
+  if (!S.reviewDone) return alert('Дождись, пока Stockfish закончит разбор, и нажми ещё раз.');
+  const btn = $('btnShare');
+  btn.disabled = true;
+  try {
+    const page = await fetch('/').then((r) => r.text());
+    const jsSrc = page.match(/<script[^>]+src="([^"]+)"[^>]*><\/script>/)[1];
+    const cssHref = page.match(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"[^>]*>/)[1];
+    const [js, css] = await Promise.all([fetch(jsSrc).then((r) => r.text()), fetch(cssHref).then((r) => r.text())]);
+    const varFens = new Set(S.vars.flatMap((V) => V.moves.flatMap((m) => [m.fenBefore, m.fen])));
+    const data = {
+      v: 1,
+      pgn: S.pgn,
+      analyses: S.analyses,
+      quick: [...varFens].filter((f) => quickCache.has(f)).map((f) => [f, quickCache.get(f)]),
+      vars: S.vars.map((V) => ({ from: V.from, moves: V.moves.map((m) => m.uci) })),
+      orientation: S.orientation,
+      cur: S.cur,
+      by: store.get('user', 'ClassifiedMicl'),
+      engine: $('engineName').textContent,
+    };
+    const title = `Разбор: ${S.headers.White || '?'} – ${S.headers.Black || '?'}`;
+    const json = JSON.stringify(data).replace(/</g, '\\u003c');
+    const html = page
+      .replace(/<title>[^<]*<\/title>/, () => `<title>${esc(title)}</title>`)
+      .replace(/<script[^>]+src="[^"]+"[^>]*><\/script>/, () => `<script>window.__CHESS_SHARED__=${json}</script>\n<script type="module">${js.replace(/<\/script/gi, '<\\/script')}</script>`)
+      .replace(/<link[^>]+rel="stylesheet"[^>]+href="[^"]+"[^>]*>/, () => `<style>${css}</style>`);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    a.download = `${title.replace(/[\\/:*?"<>|]/g, '')}.html`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } catch (e) {
+    alert('Не получилось собрать файл: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+$('btnShare').onclick = exportShared;
+
+// Open a shared file: restore the game, its analysis and the author's variations.
+function loadShared() {
+  document.body.classList.add('shared');
+  loadPgn(SHARED.pgn, null, { shared: true });
+  S.analyses = SHARED.analyses;
+  S.analyses.forEach((a, i) => a && quickCache.set(fenAt(i), a));
+  for (const [f, a] of SHARED.quick || []) quickCache.set(f, a);
+  S.done = S.total; S.reviewDone = true;
+  classifyMainUpTo();
+  for (const V of SHARED.vars || []) {
+    S.cur = { v: -1, i: V.from };
+    for (const u of V.moves) playMove(u, { silent: true });
+  }
+  S.orientation = SHARED.orientation || 'white';
+  S.cur = SHARED.cur && (SHARED.cur.v < S.vars.length) ? SHARED.cur : { v: -1, i: 0 };
+  const by = SHARED.by ? `Разбор от ${SHARED.by}` : 'Разбор';
+  $('engineChip').textContent = `${by} · только просмотр`;
+  $('engineName').textContent = SHARED.engine || 'Stockfish';
+  render();
+}
+
 // ---------------- start ----------------
-fetch('/api/info').then((r) => r.json()).then((i) => { $('engineChip').textContent = i.engine; $('engineName').textContent = i.engine; }).catch(() => {});
-connect();
 // First render after layout, so the board has its size before arrows are drawn.
 // (setTimeout, not requestAnimationFrame: rAF never fires in a background tab.)
-setTimeout(() => {
-  const last = store.get('last', null);
-  if (last?.pgn) { try { loadPgn(last.pgn, last.preset); } catch { render(); } }
-  else render();
-}, 0);
+if (SHARED) {
+  setTimeout(loadShared, 0);
+} else {
+  fetch('/api/info').then((r) => r.json()).then((i) => { $('engineChip').textContent = i.engine; $('engineName').textContent = i.engine; }).catch(() => {});
+  connect();
+  setTimeout(() => {
+    const last = store.get('last', null);
+    if (last?.pgn) { try { loadPgn(last.pgn, last.preset); } catch { render(); } }
+    else render();
+  }, 0);
+}

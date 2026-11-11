@@ -3,7 +3,7 @@
 A local, chess.com-style game review that runs on your own computer with a full-strength
 **Stockfish** engine. The interface is in Russian.
 
-- Load a game from a **chess.com** or **lichess** link, paste a **PGN**, or pick from a chess.com player's recent games.
+- Load a game from a **chess.com** (live, daily or vs bot) or **lichess** link, paste a **PGN**, or pick from a chess.com player's recent games.
 - Every move gets a class like on chess.com: brilliant, great, best, excellent, good, book,
   inaccuracy, mistake, miss, blunder. Player accuracy uses the lichess formula.
 - **Explanations** for each move: what it does (fork, pin, check, hanging piece, mate threat,
@@ -14,6 +14,9 @@ A local, chess.com-style game review that runs on your own computer with a full-
 - **Live analysis** of the current position: 3 engine lines, best-move arrow, "threat" button.
 - **Retry** mode on mistakes: try to find a better move yourself.
 - **Report**: accuracy, move-class counts, opening name, key moments.
+- **Share**: the "Поделиться" button saves the whole review (moves, grades, explanations, engine lines,
+  graph, report and your own variations) as one HTML file. Send it to a friend: it opens in any browser,
+  offline, without installing anything. It is view-only, because the engine runs on your computer.
 
 ## Requirements
 
